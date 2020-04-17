@@ -1,0 +1,725 @@
+---
+title: "HW3 Part 2"
+author: "Arshia Singh"
+date: "April 11, 2020"
+output: html_document
+---
+
+## Question 3 - Word2Vec Embeddings
+### 1
+I think there are anumber of preprocessing steps that could improve the quality of the embedding. First I would remove stopwords and possibly also numbers. I would also stem the words so that there wouldn't be different embeddings for variants of the same word like boil and boiling. Lemmatization might also be a good option to capture words of different forms (better, good) and collate them into one canonical form.
+
+### 2  
+```{r}
+####################################
+##### Loading libraries & data #####
+####################################
+library(wordVectors)
+library(Rtsne)
+library(tidytext)
+library(tidyverse)
+
+####################################
+#####       Download data      #####
+####################################
+# -- Check to see  if file exists --
+if (!file.exists("cookbooks.zip")) {
+  download.file("http://archive.lib.msu.edu/dinfo/feedingamerica/cookbook_text.zip","cookbooks.zip")
+}
+unzip("cookbooks.zip",exdir="cookbooks")
+if (!file.exists("cookbooks.txt")) prep_word2vec(origin="cookbooks",destination="cookbooks.txt",lowercase=T,bundle_ngrams=1)
+
+# Training a Word2Vec model
+if (!file.exists("cookbook_vectors.bin")) {
+  model = train_word2vec("cookbooks.txt","cookbook_vectors.bin",
+                         vectors=100,threads=4,window=6,
+                         min_count = 10,
+                         iter=5,negative_samples=15)
+} else{
+    model = read.vectors("cookbook_vectors.bin")
+    }
+```
+
+```{r}
+####################################
+#####      Proximity search    #####
+####################################
+
+# -- Select ingredient and cuisine --
+ingredient = 'sage'
+ingredient_2 = 'thyme'
+ingredient_3 = 'basil'
+list_of_ingredients = c(ingredient, ingredient_2, ingredient_3)
+cuisine = 'italian'
+
+# Coordinages in 300D space of embedding for the word "sage" 
+model[[ingredient]]
+
+# Searching closest words to sage
+model %>% closest_to(model[[ingredient]]) #<- set of closest ingredients to "sage"
+model %>% closest_to(model[[cuisine]], 20) #<- set of closest cuisines to "italian"
+
+# Set of closest words to "sage", "thyme","basil"
+model %>% closest_to(model[[list_of_ingredients]],10)
+```
+
+```{r}
+####################################
+#####      Proximity search    #####
+####################################
+
+# -- Select ingredient and cuisine --
+ingredient = 'turmeric'
+ingredient_2 = 'cumin'
+ingredient_3 = 'ginger'
+list_of_ingredients = c(ingredient, ingredient_2, ingredient_3)
+cuisine = 'indian'
+
+# Coordinages in 300D space of embedding for the word "turmeric" 
+model[[ingredient]]
+
+# Searching closest words to sage
+model %>% closest_to(model[[ingredient]]) #<- set of closest ingredients to "turmeric"
+model %>% closest_to(model[[cuisine]], 20) #<- set of closest cuisines to "indian"
+
+# Set of closest words to "turmeric", "cumin","ginger"
+model %>% closest_to(model[[list_of_ingredients]],10)
+```
+My ingredients were turmeric, cumin, and ginger. The top ten ingredients closest to this set of ingredients were turmeric, ginger, cumin, tumeric, coriander, cardamoms, cardamom, alspice, mustard, and cardamon. This is somewhat interesting because there are a number of misspellings that made the list, and also because allspice and cardamom are slightly sweeter ingredients than the ones I listed. Coriander and cardamom are very common ingredients used in indian cooking, but allspice is not as common, so I thought that was a bit odd.  
+  
+### 3  
+```{r}
+#############################################
+#####   Using TSNE to see similarity    #####
+#############################################
+# We have a list of potential herb-related words from old cookbooks. 
+n_words = 100
+closest_ingredients = closest_to(model,model[[list_of_ingredients]], n_words)$word
+surrounding_ingredients = model[[closest_ingredients,average=F]]
+plot(surrounding_ingredients,method="pca")
+
+embedding = Rtsne(X = surrounding_ingredients, dims = 2, 
+                  perplexity = 4, 
+                  theta = 0.5, 
+                  eta = 10,
+                  pca = TRUE, verbose = TRUE, 
+                  max_iter = 2000)
+embedding_vals = embedding$Y
+rownames(embedding_vals) = rownames(surrounding_ingredients)
+
+# Looking for clusters for embedding
+set.seed(10)
+n_centers = 10
+clustering = kmeans(embedding_vals,centers=n_centers,
+                    iter.max = 5)
+
+# Setting up data for plotting
+embedding_plot = tibble(x = embedding$Y[,1], 
+                        y = embedding$Y[,2],
+                        labels = rownames(surrounding_ingredients)) %>% 
+  bind_cols(cluster = as.character(clustering$cluster))
+
+# Visualizing TSNE output
+ggplot(aes(x = x, y=y,label = labels, color = cluster), data = embedding_plot) + 
+  geom_text() +xlab('tSNE dimension 1') +ylab('tSNE dimension 2"')+theme(legend.position = 'none')
+
+# Topics produced by the top 3 words
+sapply(sample(1:n_centers,n_centers),function(n) {
+  names(clustering$cluster[clustering$cluster==n][1:10])
+})
+```
+  
+### 4  
+```{r}
+##################################################
+#####   Plotting Sweet and Salty Dimensions  #####
+##################################################
+# -- Plotting across the sweet-salty plane --
+tastes = model[[c("sweet","salty"),average=F]]
+sweet_and_saltiness = model[1:500,] %>% cosineSimilarity(tastes)
+
+# Filter to the top n words for sweet or salty.
+top_n_words = 10
+sweet_and_saltiness = sweet_and_saltiness[
+  rank(-sweet_and_saltiness[,1])<top_n_words | 
+    rank(-sweet_and_saltiness[,2])<top_n_words,
+  ]
+plot(sweet_and_saltiness,type='n')
+text(sweet_and_saltiness,labels=rownames(sweet_and_saltiness))
+```
+  
+```{r}
+###########################################
+#####   Plotting 5 Taste  Dimensions  #####
+###########################################
+# We can plot along mltiple dimensions:
+tastes = c("salty","sweet","savory","bitter","sour")
+common_similarities_tastes = model[1:3000,]%>% cosineSimilarity( model[[tastes,average=F]])
+high_similarities_to_tastes = common_similarities_tastes[rank(-apply(common_similarities_tastes,1,max)) < 20,]
+
+# - Plotting
+high_similarities_to_tastes %>% 
+  as_tibble(rownames='word') %>%
+  filter( ! (is.element(word,tastes))) %>%
+  #mutate(total = salty+sweet+savory+bitter+sour) %>%
+  #mutate( sweet=sweet/total,salty=salty/total,savory=savory/total,bitter=bitter/total, sour = sour/total) %>% 
+  #select(-total) %>%
+  gather(key = 'key', value = 'value',-word) %>%
+  ggplot(aes(x = word,
+             y = value, 
+             fill = key)) + geom_bar(stat='identity') + 
+  coord_flip() + theme_minimal() + scale_fill_brewer(palette='Spectral')
+
+
+# --- Most similar terms  ---
+high_similarities_to_tastes %>% 
+  prcomp %>% 
+  biplot(main="Fifty words in a\nprojection of flavor space")
+```
+```{r}
+###########################################
+#####   Plotting 5 Temperature Dimensions  #####
+###########################################
+rownames(model[1000:2000,])
+# We can plot along mltiple dimensions:
+tastes = c("toast", "cool", "ice")
+common_similarities_tastes = model[1:5000,]%>% cosineSimilarity( model[[tastes,average=F]])
+high_similarities_to_tastes = common_similarities_tastes[rank(-apply(common_similarities_tastes,1,max)) < 20,]
+
+# - Plotting
+high_similarities_to_tastes %>% 
+  as_tibble(rownames='word') %>%
+  filter( ! (is.element(word,tastes))) %>%
+  #mutate(total = salty+sweet+savory+bitter+sour) %>%
+  #mutate( sweet=sweet/total,salty=salty/total,savory=savory/total,bitter=bitter/total, sour = sour/total) %>% 
+  #select(-total) %>%
+  gather(key = 'key', value = 'value',-word) %>%
+  ggplot(aes(x = word,
+             y = value, 
+             fill = key)) + geom_bar(stat='identity') + 
+  coord_flip() + theme_minimal() + scale_fill_brewer(palette='Spectral')
+
+
+# --- Most similar terms  ---
+high_similarities_to_tastes %>% 
+  prcomp %>% 
+  biplot(main="Fifty words in a\nprojection of temperature space")
+```
+I think these make sense - I would expect words associated with cool to be closer to ice than to toast, and that seems to be the case, at least somewhat. The words also make sense generally, usually you "set aside" things to cool or let dry. All the words that had the highest "ice" values were logical. "Crisp", "graham", and "wafer" all make sense for toast as well.  
+  
+### 5    
+```{r}
+##################################
+#####   Vector calculations  #####
+##################################
+model %>% closest_to("health") # words associated with haelthy living (if not a bit outdated)
+model %>% closest_to(~("health" - "cream" ),15) # number 7 is cravings
+model %>% closest_to(~"orange" + ("pretzel"- "salty"),15)
+
+model %>% closest_to(~"french" + ("florentine" - "kebab"),15)
+
+top_evaluative_words = model %>% 
+  closest_to(~ "poached"+"florentine",n=30)
+goodness = model %>% 
+  closest_to(~ "poached"-"florentine",n=Inf) 
+taste = model %>% 
+  closest_to(~ "egg" - "spinach", n=Inf)
+
+top_evaluative_words %>%
+  inner_join(goodness) %>%
+  inner_join(taste) %>%
+  ggplot() + 
+  geom_text(aes(x=`similarity to "poached" - "florentine"`,
+                y=`similarity to "egg" - "spinach"`,
+                label=word))
+
+
+```
+  
+```{r}
+##################################
+#####   Vector calculations  #####
+##################################
+model %>% closest_to("bake") # words associated with haelthy living (if not a bit outdated)
+model %>% closest_to(~("bake" - "sweet" ),15) # number 7 is cravings
+model %>% closest_to(~"chicken" + ("bake"- "marinate"),15)
+
+model %>% closest_to(~"southern" + ("spicy" - "meat"),15)
+
+top_evaluative_words = model %>% 
+  closest_to(~ "mexican"+"egg",n=30)
+goodness = model %>% 
+  closest_to(~ "mexican"-"egg",n=Inf) 
+taste = model %>% 
+  closest_to(~ "cheese"-"spicy", n=Inf)
+
+top_evaluative_words %>%
+  inner_join(goodness) %>%
+  inner_join(taste) %>%
+  ggplot() + 
+  geom_text(aes(x=`similarity to "mexican" - "egg"`,
+                y=`similarity to "cheese" - "spicy"`,
+                label=word))
+
+
+```
+  
+### 6  
+I thought it was interesting that looking at "bake - sweet" got rid of the term muffin which made sense, but didn't produce any savory items specifically. It was mostly technical terms or tools associated with baking. This might be because most of the recipes were for sweet baked good, so most of the "non-sweet" items were just neutral in flavor.  
+  
+It was odd that "southern+(spicy-meat)" mostly lead to a list of a lot of other cuisines, I didn't expect that and I'm not really sure why that was the case. Logically, I thought it might lead to some vegetables like okra or a list of beans, but that wasn't the case at all.  
+  
+My graph of "mexican-egg"vs"cheese-spicy" was very interesting! The top right area shows enchiladas which indeed are mexican, do not contain eggs, and often contain cheese. However, they can be spicy so it made total sense for it to be somewhat low on the "cheese-spicy" similarity scale. It was weird that the term "greenland" showed up so high on the "mexican-egg" scale. I'm not sure why.  
+  
+### 7  
+```{r}
+if (!file.exists("cookbooks.zip")) {
+  download.file("http://archive.lib.msu.edu/dinfo/feedingamerica/cookbook_text.zip","cookbooks.zip")
+}
+unzip("cookbooks.zip",exdir="cookbooks")
+if (!file.exists("cookbooks2.txt")) prep_word2vec(origin="cookbooks",destination="cookbooks2.txt",lowercase=T,bundle_ngrams=2)
+
+# Training a Word2Vec model
+if (!file.exists("cookbook_vectors2.bin")) {
+  model2 = train_word2vec("cookbooks2.txt","cookbook_vectors2.bin",
+                         vectors=100,threads=4,window=6,
+                         min_count = 10,
+                         iter=5,negative_samples=15)
+} else{
+    model2 = read.vectors("cookbook_vectors2.bin")
+}
+```
+  
+```{r}
+terms <- rownames(model2)
+bigr <- "_"
+bigrams <- terms[grepl(bigr,terms, fixed=TRUE)]
+bigrams[1:50]
+```
+These all make sense and most are specific to cooking and timing/measurement: "melted butter", "bread crumbs", "lemon juice", "powdered sugar", "frying pan", "hard boiled", "chopped parsley", "baking powder", "white wine", "lemon peel"  
+  
+## Question 4 - Gaussian Processes  
+
+```{r}
+library(MASS)
+
+########################################################
+## Plotting Gaussian plots
+########################################################
+# Multivariate normal 0 variance
+set.seed(1234)
+
+d2 = mvrnorm(n =1000, mu =c(0,0), Sigma = matrix(c(1,0.5,0.5,1),ncol = 2))
+
+ggplot(aes(x = x, y= y), data = tibble(x = d2[,1], y = d2[,2])) + 
+  geom_point(size = 0.5)+ 
+  geom_vline(xintercept = 0) + geom_hline(yintercept = 0) +
+  stat_ellipse(size = 1.5, color = 'firebrick2')  + 
+  coord_fixed(ratio = 1)+ ylim(c(-3,3))+xlim(c(-3,3))
+
+##################################
+## Simulating a bivariate normal #
+##################################
+n_samples = 1000
+d = 2
+Z = matrix(rnorm(n_samples * d), ncol = 2)
+rho = -0.9
+mu = c(5,5)
+Sigma = matrix(c(1,rho,rho,1), ncol = 2)
+L = chol(Sigma)
+X = mu + Z %*% L
+colnames(X) = c('x1','x2')
+ggplot(aes(x =x1, y = x2), data = as_tibble(X)) + 
+  geom_point(size = 1, alpha =0.5)+ 
+  coord_fixed(ratio = 1) +xlim(c(2,8))+ylim(c(2,8))
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+n = 50
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+f = sin(x_observed) + rnorm(3)
+
+theme_set(theme_bw(base_size = 18))
+ggplot(aes(x = x, y= y), data = tibble(x = x_observed, y = f)) + 
+  geom_point() +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+# Kernel matrix
+K = function(x,x_prime,l){
+  d = sapply(x, FUN = function(x_in)(x_in - x_prime)^2)
+  return(t(exp(-1/(2*l^2) *d)))
+}
+
+# Generating Data
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+x_prime = seq(-5,5,length.out = n)
+f = sin(x_observed)
+
+# Setting up GP
+mu = 0
+mu_star = 0
+l = 1
+
+# Covariance of f
+K_f = K(x_observed,x_observed,l)
+
+# Marginal and conditional covariance of f_star|f
+K_star = K(x_observed,x_prime,l)
+K_starstar = K(x_prime,x_prime,l)
+
+# Conditional distribution of  f_star|f
+mu_star = mu_star + t(K_star) %*% solve(K_f) %*% (f - mu)
+Sigma_star = K_starstar - t(K_star)%*% t(solve(K_f)) %*% K_star
+
+# Re-arranging values for plotting
+plot_gp = tibble(x = x_prime, 
+                 y = mu_star %>% as.vector(),
+                 sd_prime = sqrt(diag(Sigma_star)))
+
+# Plotting values
+ggplot(aes(x = x, y = y), data = plot_gp) + 
+  geom_line()+ 
+  geom_ribbon(aes(ymin = y-sd_prime,ymax = y+sd_prime), alpha = 0.2)+
+  geom_point(aes(x =x , y= y), data = tibble(x = x_observed, y = f), 
+             color = 'red') +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+x = c(1,2,3)
+x_prime= c(1,2,3)
+
+
+
+########################################################
+## Examples of GPs
+########################################################
+# Kernel matrix
+Wiener_Process = function(x){
+  return(sapply(x, FUN = function(x_in)(pmin(x_in, x))))
+}
+
+Ornstein_Uhlenbeck= function(x){
+  d = sapply(x, FUN = function(x_in)(abs(x_in- x)))
+  return(exp(-d))
+}
+
+Browninan_bridge = function(x){
+  # x in (0,1)
+  d1 = sapply(x, FUN = function(x_in)(pmin(x_in, x)))
+  d2 = sapply(x, FUN = function(x_in)(x_in * x))
+  return(d1-d2)
+}
+
+kernel_rbf = function(x){
+  exp(-as.matrix(dist(x, diag = T))^2/2)
+}
+
+sampling_from_a_gp = function(x_min = 0, 
+                              x_max=1,
+                              kernel_in,
+                              n = 50, 
+                              n_gps = 10){
+  
+  # Simulation
+  x = seq(x_min, x_max,length.out = n)
+  K = kernel_in(x)
+  L = chol(K + 1e-6*diag(n))
+  f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+  
+  # Reshaping
+  colnames(f_prior) = paste0('Simulation ', seq(1:n_gps))  
+  f_prior_long_format = f_prior %>% as_tibble() %>% 
+    bind_cols(x = x) %>% 
+    pivot_longer(cols = starts_with("sim"))
+  
+  # Plot
+  p = ggplot(aes(x = x, color = name, y = value),
+             data = f_prior_long_format) + 
+    geom_line()+theme(legend.position = 'bottom')+
+    guides(color=guide_legend(title=""))+
+    ylab('f(x)')
+  return(list('data_out' = f_prior, 'plot' = p))
+}
+
+sampling_from_a_gp(kernel_in = Browninan_bridge, n_gps = 5, n = 1000)
+########################################################
+## Generating a sample from a GP
+########################################################
+
+# Sampling from the prior GP
+kernel_rbf = function(x){
+  exp(-as.matrix(dist(x, diag = T))^2/2)
+}
+n = 1000
+n_gps = 5
+x = seq(-5,5,length.out = n)
+K = kernel_rbf(x)
+L = chol(K + 1e-6*diag(n))
+f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+colnames(f_prior) = paste0('simluation_', seq(1:n_gps))  
+f_prior_long_format = f_prior %>% as_tibble() %>% bind_cols(x = x) %>% pivot_longer(cols = starts_with("sim"))
+ggplot(aes(x = x, color = name, y = value), data = f_prior_long_format) + geom_line()+theme(legend.position = 'bottom')+
+  guides(color=guide_legend(title=""))+
+  ylab('f(x)')
+
+########################################################
+## Learning values from a GP 
+########################################################
+n = 50
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+x_prime = seq(-5,5,length.out = n)
+f = sin(x_observed)
+mu = 0
+mu_star = 0
+l = 1
+
+K = function(x,x_prime,l){
+  d = sapply(x, FUN = function(x_in)(x_in - x_prime)^2)
+  return(t(exp(-1/(2*l^2) *d)))
+}
+
+K_f = K(x_observed,x_observed,l)
+K_star = K(x_observed,x_prime,l)
+K_starstar = K(x_prime,x_prime,l)
+mu_star = mu_star + t(K_star) %*% solve(K_f) %*% (f - mu)
+Sigma_star = K_starstar - t(K_star)%*% t(solve(K_f)) %*% K_star
+
+# Re-arranging values for plotting
+plot_gp = tibble(x = x_prime, 
+                 y = mu_star %>% as.vector(),
+                 sd_prime = sqrt(diag(Sigma_star)))
+
+# Simulating values from posterior
+simulated_gp_posterior = t(chol(Sigma_star + 1e-6*diag(ncol(Sigma_star)))) %*% matrix(rnorm(n*n_gps), ncol = n_gps) + 
+  matrix(rep(mu_star, n_gps), ncol= n_gps)
+colnames(simulated_gp_posterior) = paste0('simluation_', seq(1:n_gps))  
+f_posterior_long_format = simulated_gp_posterior %>% as_tibble() %>% bind_cols(x = x_prime) %>% pivot_longer(cols = starts_with("sim"))
+
+# Plotting values
+ggplot(aes(x = x, y = y), data = plot_gp) + 
+  geom_line()+ 
+  geom_ribbon(aes(ymin = y-sd_prime,ymax = y+sd_prime), alpha = 0.2)+
+  geom_point(aes(x =x , y= y), data = tibble(x = x_observed, y = f), color = 'red') #+ 
+#geom_line(aes(x = x, color = name, y = value), data = f_posterior_long_format) + geom_line()
+``` 
+
+### Part 1  
+```{r}
+
+d2 = read.csv("Part 2/kernel_regression_1.csv")
+
+ggplot(aes(x = x, y= y), data = tibble(x = d2[,1], y = d2[,2])) + 
+  geom_point(size = 0.5)+ 
+  geom_vline(xintercept = 0) + geom_hline(yintercept = 0) +
+  stat_ellipse(size = 1.5, color = 'firebrick2')  + 
+  coord_fixed(ratio = 1)+ ylim(c(-3,3))+xlim(c(-3,3))
+
+##################################
+## Simulating a bivariate normal #
+##################################
+n_samples = 1000
+d = 2
+Z = matrix(rnorm(n_samples * d), ncol = 2)
+rho = -0.9
+mu = c(5,5)
+Sigma = matrix(c(1,rho,rho,1), ncol = 2)
+L = chol(Sigma)
+X = mu + Z %*% L
+colnames(X) = c('x1','x2')
+ggplot(aes(x =x1, y = x2), data = as_tibble(X)) + 
+  geom_point(size = 1, alpha =0.5)+ 
+  coord_fixed(ratio = 1) +xlim(c(2,8))+ylim(c(2,8))
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+n = 50
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+f = sin(x_observed) + rnorm(3)
+
+theme_set(theme_bw(base_size = 18))
+ggplot(aes(x = x, y= y), data = tibble(x = x_observed, y = f)) + 
+  geom_point() +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+# Kernel matrix
+K = function(x,x_prime,l){
+  d = sapply(x, FUN = function(x_in)(x_in - x_prime)^2)
+  return(t(exp(-1/(2*l^2) *d)))
+}
+
+# Generating Data
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+x_prime = seq(-5,5,length.out = n)
+f = sin(x_observed)
+
+# Setting up GP
+mu = 0
+mu_star = 0
+l = 1
+
+# Covariance of f
+K_f = K(x_observed,x_observed,l)
+
+# Marginal and conditional covariance of f_star|f
+K_star = K(x_observed,x_prime,l)
+K_starstar = K(x_prime,x_prime,l)
+
+# Conditional distribution of  f_star|f
+mu_star = mu_star + t(K_star) %*% solve(K_f) %*% (f - mu)
+Sigma_star = K_starstar - t(K_star)%*% t(solve(K_f)) %*% K_star
+
+# Re-arranging values for plotting
+plot_gp = tibble(x = x_prime, 
+                 y = mu_star %>% as.vector(),
+                 sd_prime = sqrt(diag(Sigma_star)))
+
+# Plotting values
+ggplot(aes(x = x, y = y), data = plot_gp) + 
+  geom_line()+ 
+  geom_ribbon(aes(ymin = y-sd_prime,ymax = y+sd_prime), alpha = 0.2)+
+  geom_point(aes(x =x , y= y), data = tibble(x = x_observed, y = f), 
+             color = 'red') +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+x = c(1,2,3)
+x_prime= c(1,2,3)
+
+
+
+########################################################
+## Examples of GPs
+########################################################
+# Kernel matrix
+Wiener_Process = function(x){
+  return(sapply(x, FUN = function(x_in)(pmin(x_in, x))))
+}
+
+Ornstein_Uhlenbeck= function(x){
+  d = sapply(x, FUN = function(x_in)(abs(x_in- x)))
+  return(exp(-d))
+}
+
+Browninan_bridge = function(x){
+  # x in (0,1)
+  d1 = sapply(x, FUN = function(x_in)(pmin(x_in, x)))
+  d2 = sapply(x, FUN = function(x_in)(x_in * x))
+  return(d1-d2)
+}
+
+kernel_rbf = function(x){
+  exp(-as.matrix(dist(x, diag = T))^2/2)
+}
+
+sampling_from_a_gp = function(x_min = 0, 
+                              x_max=1,
+                              kernel_in,
+                              n = 50, 
+                              n_gps = 10){
+  
+  # Simulation
+  x = seq(x_min, x_max,length.out = n)
+  K = kernel_in(x)
+  L = chol(K + 1e-6*diag(n))
+  f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+  
+  # Reshaping
+  colnames(f_prior) = paste0('Simulation ', seq(1:n_gps))  
+  f_prior_long_format = f_prior %>% as_tibble() %>% 
+    bind_cols(x = x) %>% 
+    pivot_longer(cols = starts_with("sim"))
+  
+  # Plot
+  p = ggplot(aes(x = x, color = name, y = value),
+             data = f_prior_long_format) + 
+    geom_line()+theme(legend.position = 'bottom')+
+    guides(color=guide_legend(title=""))+
+    ylab('f(x)')
+  return(list('data_out' = f_prior, 'plot' = p))
+}
+
+sampling_from_a_gp(kernel_in = Browninan_bridge, n_gps = 5, n = 1000)
+########################################################
+## Generating a sample from a GP
+########################################################
+
+# Sampling from the prior GP
+kernel_rbf = function(x){
+  exp(-as.matrix(dist(x, diag = T))^2/2)
+}
+n = 1000
+n_gps = 5
+x = seq(-5,5,length.out = n)
+K = kernel_rbf(x)
+L = chol(K + 1e-6*diag(n))
+f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+colnames(f_prior) = paste0('simluation_', seq(1:n_gps))  
+f_prior_long_format = f_prior %>% as_tibble() %>% bind_cols(x = x) %>% pivot_longer(cols = starts_with("sim"))
+ggplot(aes(x = x, color = name, y = value), data = f_prior_long_format) + geom_line()+theme(legend.position = 'bottom')+
+  guides(color=guide_legend(title=""))+
+  ylab('f(x)')
+
+########################################################
+## Learning values from a GP 
+########################################################
+n = 50
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+x_prime = seq(-5,5,length.out = n)
+f = sin(x_observed)
+mu = 0
+mu_star = 0
+l = 1
+
+K = function(x,x_prime,l){
+  d = sapply(x, FUN = function(x_in)(x_in - x_prime)^2)
+  return(t(exp(-1/(2*l^2) *d)))
+}
+
+K_f = K(x_observed,x_observed,l)
+K_star = K(x_observed,x_prime,l)
+K_starstar = K(x_prime,x_prime,l)
+mu_star = mu_star + t(K_star) %*% solve(K_f) %*% (f - mu)
+Sigma_star = K_starstar - t(K_star)%*% t(solve(K_f)) %*% K_star
+
+# Re-arranging values for plotting
+plot_gp = tibble(x = x_prime, 
+                 y = mu_star %>% as.vector(),
+                 sd_prime = sqrt(diag(Sigma_star)))
+
+# Simulating values from posterior
+simulated_gp_posterior = t(chol(Sigma_star + 1e-6*diag(ncol(Sigma_star)))) %*% matrix(rnorm(n*n_gps), ncol = n_gps) + 
+  matrix(rep(mu_star, n_gps), ncol= n_gps)
+colnames(simulated_gp_posterior) = paste0('simluation_', seq(1:n_gps))  
+f_posterior_long_format = simulated_gp_posterior %>% as_tibble() %>% bind_cols(x = x_prime) %>% pivot_longer(cols = starts_with("sim"))
+
+# Plotting values
+ggplot(aes(x = x, y = y), data = plot_gp) + 
+  geom_line()+ 
+  geom_ribbon(aes(ymin = y-sd_prime,ymax = y+sd_prime), alpha = 0.2)+
+  geom_point(aes(x =x , y= y), data = tibble(x = x_observed, y = f), color = 'red') #+ 
+#geom_line(aes(x = x, color = name, y = value), data = f_posterior_long_format) + geom_line()
+```
+  
+### Part 2  
