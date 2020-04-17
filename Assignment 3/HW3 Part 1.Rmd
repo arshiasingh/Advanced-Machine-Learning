@@ -2,7 +2,7 @@
 title: "HW3"
 author: "Arshia Singh"
 date: "March 31, 2020"
-output: html_document
+output: html_notebook
 ---
 Collaborators: Xiner, Norman, Jack  
   
@@ -702,15 +702,3 @@ for (i in etas){
 }
 ```
 It looks like lower learning rates result in increased bleeding over between clusters - probably because the algorithm doesn't achieve as much convergence with lower learning rates and the same number of iterations. The output also shows that the iter_costs (KL divergence) is higher for the lower learning rates.  
-
-  
-## Part 2  
-### Question 2: Word2Vec Embeddings  
-#### 1  
-#### 2  
-#### 3  
-#### 4  
-#### 5  
-#### 6  
-#### 7  
-### Question 4: Gaussian Processes  

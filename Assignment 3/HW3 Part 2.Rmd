@@ -2,7 +2,7 @@
 title: "HW3 Part 2"
 author: "Arshia Singh"
 date: "April 11, 2020"
-output: html_document
+output: html_notebook
 ---
 
 ## Question 3 - Word2Vec Embeddings
