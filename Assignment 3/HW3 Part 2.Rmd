@@ -284,7 +284,7 @@ if (!file.exists("cookbook_vectors2.bin")) {
   model2 = train_word2vec("cookbooks2.txt","cookbook_vectors2.bin",
                          vectors=100,threads=4,window=6,
                          min_count = 10,
-                         iter=5,negative_samples=15)
+                         iter=5,negative_samplestt=15)
 } else{
     model2 = read.vectors("cookbook_vectors2.bin")
 }
@@ -517,7 +517,7 @@ ggplot(aes(x = x, y = y), data = plot_gp) +
 ### Part 1  
 ```{r}
 
-d2 = read.csv("Part 2/kernel_regression_1.csv")
+d2 = read.csv("C:/Users/Arshia/Documents/Georgetown/ANLY601 Advanced Machine Learning/Assignment 3/Part 2/kernel_regression_1.csv")
 
 ggplot(aes(x = x, y= y), data = tibble(x = d2[,1], y = d2[,2])) + 
   geom_point(size = 0.5)+ 
@@ -722,4 +722,207 @@ ggplot(aes(x = x, y = y), data = plot_gp) +
 #geom_line(aes(x = x, color = name, y = value), data = f_posterior_long_format) + geom_line()
 ```
   
-### Part 2  
+```{r}
+##################################
+## Simulating a bivariate normal #
+##################################
+n_samples = 1000
+d = 2
+Z = matrix(rnorm(n_samples * d), ncol = 2)
+rho = -0.9
+mu = c(5,5)
+Sigma = matrix(c(1,rho,rho,1), ncol = 2)
+L = chol(Sigma)
+X = mu + Z %*% L
+colnames(X) = c('x1','x2')
+ggplot(aes(x =x1, y = x2), data = as_tibble(X)) + 
+  geom_point(size = 1, alpha =0.5)+ 
+  coord_fixed(ratio = 1) +xlim(c(2,8))+ylim(c(2,8))
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+n = 50
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+f = sin(x_observed) + rnorm(3)
+
+theme_set(theme_bw(base_size = 18))
+ggplot(aes(x = x, y= y), data = tibble(x = x_observed, y = f)) + 
+  geom_point() +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+########################################################
+## 3 Random points on a graph
+########################################################
+# Kernel matrix
+K = function(x,x_prime,l){
+  d = sapply(x, FUN = function(x_in)(x_in - x_prime)^2)
+  return(t(exp(-1/(2*l^2) *d)))
+}
+
+# Generating Data
+set.seed(12345)
+x_observed = sample(seq(-5,5,0.05), size = 3)
+x_prime = seq(-5,5,length.out = n)
+f = sin(x_observed)
+
+# Setting up GP
+mu = 0
+mu_star = 0
+l = 1
+
+# Covariance of f
+K_f = K(x_observed,x_observed,l)
+
+# Marginal and conditional covariance of f_star|f
+K_star = K(x_observed,x_prime,l)
+K_starstar = K(x_prime,x_prime,l)
+
+# Conditional distribution of  f_star|f
+mu_star = mu_star + t(K_star) %*% solve(K_f) %*% (f - mu)
+Sigma_star = K_starstar - t(K_star)%*% t(solve(K_f)) %*% K_star
+
+# Re-arranging values for plotting
+plot_gp = tibble(x = x_prime, 
+                 y = mu_star %>% as.vector(),
+                 sd_prime = sqrt(diag(Sigma_star)))
+
+# Plotting values
+ggplot(aes(x = x, y = y), data = plot_gp) + 
+  geom_line()+ 
+  geom_ribbon(aes(ymin = y-sd_prime,ymax = y+sd_prime), alpha = 0.2)+
+  geom_point(aes(x =x , y= y), data = tibble(x = x_observed, y = f), 
+             color = 'red') +
+  xlim(c(-5,5))+ylim(c(-2,2))+
+  coord_fixed(ratio = 1) +ylab('f(x)')
+
+
+x = c(1,2,3)
+x_prime= c(1,2,3)
+
+
+
+########################################################
+## Examples of GPs
+########################################################
+# Kernel matrix
+Wiener_Process = function(x){
+  return(sapply(x, FUN = function(x_in)(pmin(x_in, x))))
+}
+
+Ornstein_Uhlenbeck= function(x){
+  d = sapply(x, FUN = function(x_in)(abs(x_in- x)))
+  return(exp(-d))
+}
+
+Browninan_bridge = function(x){
+  # x in (0,1)
+  d1 = sapply(x, FUN = function(x_in)(pmin(x_in, x)))
+  d2 = sapply(x, FUN = function(x_in)(x_in * x))
+  return(d1-d2)
+}
+
+kernel_rbf = function(x, theta){
+  exp(-as.matrix(dist(x, diag = T))^2/(2*theta))
+}
+
+sampling_from_a_gp = function(x_min = 0, 
+                              x_max=1,
+                              kernel_in,
+                              n = 50, 
+                              n_gps = 10){
+  
+  # Simulation
+  x = seq(x_min, x_max,length.out = n)
+  K = kernel_in(x)
+  L = chol(K + 1e-6*diag(n))
+  f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+  
+  # Reshaping
+  colnames(f_prior) = paste0('Simulation ', seq(1:n_gps))  
+  f_prior_long_format = f_prior %>% as_tibble() %>% 
+    bind_cols(x = x) %>% 
+    pivot_longer(cols = starts_with("sim"))
+  
+  # Plot
+  p = ggplot(aes(x = x, color = name, y = value),
+             data = f_prior_long_format) + 
+    geom_line()+theme(legend.position = 'bottom')+
+    guides(color=guide_legend(title=""))+
+    ylab('f(x)')
+  return(list('data_out' = f_prior, 'plot' = p))
+}
+
+sampling_from_a_gp(kernel_in = Browninan_bridge, n_gps = 5, n = 1000)
+########################################################
+## Generating a sample from a GP
+########################################################
+
+# Sampling from the prior GP
+kernel_rbf = function(x){
+  exp(-as.matrix(dist(x, diag = T))^2/2)
+}
+n = 1000
+n_gps = 5
+x = seq(-5,5,length.out = n)
+K = kernel_rbf(x)
+L = chol(K + 1e-6*diag(n))
+f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+colnames(f_prior) = paste0('simluation_', seq(1:n_gps))  
+f_prior_long_format = f_prior %>% as_tibble() %>% bind_cols(x = x) %>% pivot_longer(cols = starts_with("sim"))
+ggplot(aes(x = x, color = name, y = value), data = f_prior_long_format) + geom_line()+theme(legend.position = 'bottom')+
+  guides(color=guide_legend(title=""))+
+  ylab('f(x)')
+
+########################################################
+## Learning values from a GP 
+########################################################
+```
+
+```{r}
+
+```
+  
+### Part 2  (Question 2: Time Series)
+```{r}
+tims <- function(x, c=2, p=3, l=1.5, sig=2, sigv=1.25, sigb=2){
+   d=sapply(x, FUN = function(x_in)(x_in- x))
+   xc=sapply(x, FUN = function(x_in)((x_in- c)*(x-c)))
+   per=(sig^2)*exp(-2*(sin(((pi*abs(d))/p)/(l^2))^2))
+   return(per+(per)*exp(-d^2/(2*l^2))+sigb^2+(sigv^2)*xc)
+}
+
+sampling_from_a_gp = function(x_min = 0, 
+                              x_max=10,
+                              kernel_in,
+                              n = 50, 
+                              n_gps = 10){
+  
+  # Simulation
+  x = seq(x_min, x_max,length.out = n)
+  K = kernel_in(x)
+  L = chol(K + 1e-6*diag(n))
+  f_prior = t(L) %*% matrix(rnorm(n*n_gps), ncol = n_gps)
+  
+  # Reshaping
+  colnames(f_prior) = paste0('Simulation ', seq(1:n_gps))  
+  f_prior_long_format = f_prior %>% as_tibble() %>% 
+    bind_cols(x = x) %>% 
+    pivot_longer(cols = starts_with("sim"))
+  
+  # Plot
+  p = ggplot(aes(x = x, color = name, y = value),
+             data = f_prior_long_format) + 
+    geom_line()+theme(legend.position = 'bottom')+
+    guides(color=guide_legend(title=""))+
+    ylab('f(x)')
+  return(list('data_out' = f_prior, 'plot' = p))
+}
+
+sampling_from_a_gp(kernel_in = tims, n_gps = 10, n = 1000)
+
+```
