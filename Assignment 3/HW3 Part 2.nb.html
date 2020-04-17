@@ -187,35 +187,17 @@ $(document).ready(function () {
 <h3>2</h3>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjXG4jIyMjIyBMb2FkaW5nIGxpYnJhcmllcyAmIGRhdGEgIyMjIyNcbiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI1xubGlicmFyeSh3b3JkVmVjdG9ycylcbmxpYnJhcnkoUnRzbmUpXG5saWJyYXJ5KHRpZHl0ZXh0KVxubGlicmFyeSh0aWR5dmVyc2UpXG5cbiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI1xuIyMjIyMgICAgICAgRG93bmxvYWQgZGF0YSAgICAgICMjIyMjXG4jIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyNcbiMgLS0gQ2hlY2sgdG8gc2VlICBpZiBmaWxlIGV4aXN0cyAtLVxuaWYgKCFmaWxlLmV4aXN0cyhcImNvb2tib29rcy56aXBcIikpIHtcbiAgZG93bmxvYWQuZmlsZShcImh0dHA6Ly9hcmNoaXZlLmxpYi5tc3UuZWR1L2RpbmZvL2ZlZWRpbmdhbWVyaWNhL2Nvb2tib29rX3RleHQuemlwXCIsXCJjb29rYm9va3MuemlwXCIpXG59XG51bnppcChcImNvb2tib29rcy56aXBcIixleGRpcj1cImNvb2tib29rc1wiKVxuaWYgKCFmaWxlLmV4aXN0cyhcImNvb2tib29rcy50eHRcIikpIHByZXBfd29yZDJ2ZWMob3JpZ2luPVwiY29va2Jvb2tzXCIsZGVzdGluYXRpb249XCJjb29rYm9va3MudHh0XCIsbG93ZXJjYXNlPVQsYnVuZGxlX25ncmFtcz0xKVxuXG4jIFRyYWluaW5nIGEgV29yZDJWZWMgbW9kZWxcbmlmICghZmlsZS5leGlzdHMoXCJjb29rYm9va192ZWN0b3JzLmJpblwiKSkge1xuICBtb2RlbCA9IHRyYWluX3dvcmQydmVjKFwiY29va2Jvb2tzLnR4dFwiLFwiY29va2Jvb2tfdmVjdG9ycy5iaW5cIixcbiAgICAgICAgICAgICAgICAgICAgICAgICB2ZWN0b3JzPTEwMCx0aHJlYWRzPTQsd2luZG93PTYsXG4gICAgICAgICAgICAgICAgICAgICAgICAgbWluX2NvdW50ID0gMTAsXG4gICAgICAgICAgICAgICAgICAgICAgICAgaXRlcj01LG5lZ2F0aXZlX3NhbXBsZXM9MTUpXG59IGVsc2V7XG4gICAgbW9kZWwgPSByZWFkLnZlY3RvcnMoXCJjb29rYm9va192ZWN0b3JzLmJpblwiKVxuICAgIH1cbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjXG4jIyMjIyBMb2FkaW5nIGxpYnJhcmllcyAmIGRhdGEgIyMjIyNcbiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI1xubGlicmFyeSh3b3JkVmVjdG9ycylcbmxpYnJhcnkoUnRzbmUpXG5saWJyYXJ5KHRpZHl0ZXh0KVxuYGBgIn0= -->
 <pre class="r"><code>####################################
 ##### Loading libraries &amp; data #####
 ####################################
 library(wordVectors)
 library(Rtsne)
-library(tidytext)
-library(tidyverse)
-
-####################################
-#####       Download data      #####
-####################################
-# -- Check to see  if file exists --
-if (!file.exists(&quot;cookbooks.zip&quot;)) {
-  download.file(&quot;http://archive.lib.msu.edu/dinfo/feedingamerica/cookbook_text.zip&quot;,&quot;cookbooks.zip&quot;)
-}
-unzip(&quot;cookbooks.zip&quot;,exdir=&quot;cookbooks&quot;)
-if (!file.exists(&quot;cookbooks.txt&quot;)) prep_word2vec(origin=&quot;cookbooks&quot;,destination=&quot;cookbooks.txt&quot;,lowercase=T,bundle_ngrams=1)
-
-# Training a Word2Vec model
-if (!file.exists(&quot;cookbook_vectors.bin&quot;)) {
-  model = train_word2vec(&quot;cookbooks.txt&quot;,&quot;cookbook_vectors.bin&quot;,
-                         vectors=100,threads=4,window=6,
-                         min_count = 10,
-                         iter=5,negative_samples=15)
-} else{
-    model = read.vectors(&quot;cookbook_vectors.bin&quot;)
-    }</code></pre>
+library(tidytext)</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gbGlicmFyeSh0aWR5dGV4dCkgOiB0aGVyZSBpcyBubyBwYWNrYWdlIGNhbGxlZCDigJh0aWR5dGV4dOKAmVxuIn0= -->
+<pre><code>Error in library(tidytext) : there is no package called tidytext</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
